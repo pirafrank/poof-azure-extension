@@ -1,0 +1,63 @@
+{
+  "manifestVersion": 1,
+  "id": "poof-installer",
+  "name": "poof — Binary Installer",
+  "version": "1.0.0",
+  "publisher": "pirafrank",
+  "targets": [
+    {
+      "id": "Microsoft.VisualStudio.Services"
+    }
+  ],
+  "description": "Install poof and pre-built binaries from GitHub Releases into your Azure DevOps pipeline.",
+  "categories": ["Azure Pipelines"],
+  "keywords": ["poof", "binary", "installer", "github releases", "tools"],
+  "icons": {
+    "default": "images/icon.png"
+  },
+  "links": {
+    "home": {
+      "uri": "https://github.com/pirafrank/poof"
+    },
+    "support": {
+      "uri": "https://github.com/pirafrank/poof-azure-extension/issues"
+    },
+    "repository": {
+      "uri": "https://github.com/pirafrank/poof-azure-extension"
+    },
+    "license": {
+      "uri": "https://github.com/pirafrank/poof-azure-extension/blob/main/LICENSE.md"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "uri": "https://github.com/pirafrank/poof-azure-extension"
+  },
+  "galleryFlags": [],
+  "badges": [],
+  "content": {
+    "details": {
+      "path": "README.md"
+    }
+  },
+  "files": [
+    {
+      "path": "tasks/PoofInstall",
+      "packagePath": "tasks/PoofInstall"
+    },
+    {
+      "path": "images",
+      "packagePath": "images"
+    }
+  ],
+  "contributions": [
+    {
+      "id": "poof-install-task",
+      "type": "ms.vss-distributed-task.task",
+      "targets": ["ms.vss-distributed-task.tasks"],
+      "properties": {
+        "name": "tasks/PoofInstall"
+      }
+    }
+  ]
+}

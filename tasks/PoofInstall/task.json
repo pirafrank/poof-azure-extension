@@ -1,0 +1,47 @@
+{
+  "id": "7c0be68d-4be0-41cb-9328-bce57ba156b7",
+  "name": "Poof",
+  "friendlyName": "Setup poof",
+  "description": "Install poof and optionally install pre-built binaries from GitHub Releases. poof and any installed tools are added to PATH for subsequent steps.",
+  "helpMarkDown": "See [poof](https://github.com/pirafrank/poof) for details.",
+  "category": "Tool",
+  "author": "pirafrank",
+  "version": {
+    "Major": 1,
+    "Minor": 0,
+    "Patch": 0
+  },
+  "minimumAgentVersion": "2.206.1",
+  "instanceNameFormat": "Setup poof $(version)",
+  "inputs": [
+    {
+      "name": "version",
+      "type": "string",
+      "label": "poof version",
+      "defaultValue": "latest",
+      "required": false,
+      "helpMarkDown": "Version of poof to bootstrap (e.g. `v0.6.0`). Defaults to `latest`, which always installs the most recent release."
+    },
+    {
+      "name": "packages",
+      "type": "multiLine",
+      "label": "Packages to install",
+      "defaultValue": "",
+      "required": false,
+      "helpMarkDown": "Newline or comma-separated list of GitHub repos to install, in `USER/REPO` format with an optional tag after `@` (e.g. `ms-jpq/sad` or `pirafrank/vault-conductor@v0.3.0`). Leave empty to skip package installation."
+    },
+    {
+      "name": "githubToken",
+      "type": "string",
+      "label": "GitHub token",
+      "defaultValue": "$(GITHUB_TOKEN)",
+      "required": false,
+      "helpMarkDown": "GitHub personal access token for authenticated API requests. Pass a pipeline secret variable using macro syntax (e.g. `$(MY_GITHUB_PAT)`). Avoids GitHub API rate limiting (60 req/h unauthenticated → 5,000 req/h authenticated). Leave empty to use unauthenticated requests."
+    }
+  ],
+  "execution": {
+    "Node20_1": {
+      "target": "index.js"
+    }
+  }
+}

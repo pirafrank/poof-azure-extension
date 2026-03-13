@@ -1,0 +1,28 @@
+name: Publish Extension
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install && npm run install:task
+
+      - name: Build task
+        run: npm run build:task
+
+      - name: Package extension
+        run: npx tfx extension create --manifest-globs vss-extension.json --output-path dist
+
+      - name: Publish to Marketplace
+        run: npx tfx extension publish --manifest-globs vss-extension.json --token "${{ secrets.MARKETPLACE_PAT }}"
