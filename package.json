@@ -18,7 +18,7 @@
     "validate": "node scripts/validate.mjs"
   },
   "devDependencies": {
-    "@types/node": "24.10.1",
+    "@types/node": "26.6.6",
     "adm-zip": "0.6.1",
     "tfx-cli": "0.24.2",
     "typescript": "5.9.3",
