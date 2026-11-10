@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "id": "poof-installer",
-  "name": "poof — Binary Installer",
+  "name": "Setup poof",
   "version": "1.0.0",
   "publisher": "pirafrank",
   "targets": [
@@ -13,7 +13,7 @@
   "categories": ["Azure Pipelines"],
   "keywords": ["poof", "binary", "installer", "github releases", "tools"],
   "icons": {
-    "default": "images/icon.png"
+    "default": "images/poof_tx_bg_128x128.png"
   },
   "links": {
     "home": {

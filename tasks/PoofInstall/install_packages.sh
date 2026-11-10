@@ -18,8 +18,9 @@ fi
 
 # Split on newlines and commas, trim whitespace, skip empty lines.
 # Supports optional tag: user/repo@v1.0.0 -> poof install user/repo --tag v1.0.0
-while IFS= read -r pkg; do
-  pkg="$(echo "$pkg" | xargs 2>/dev/null || echo "$pkg")"
+while IFS= read -r pkg || [[ -n "$pkg" ]]; do
+  pkg="${pkg#"${pkg%%[![:space:]]*}"}"
+  pkg="${pkg%"${pkg##*[![:space:]]}"}"
   [ -z "$pkg" ] && continue
   if [[ "$pkg" == *@* ]]; then
     slug="${pkg%%@*}"
@@ -30,4 +31,4 @@ while IFS= read -r pkg; do
     echo "Installing ${pkg} with poof..."
     poof install "$pkg"
   fi
-done < <(printf '%s' "${POOF_PACKAGES}" | tr ',' '\n')
+done < <(printf '%s\n' "${POOF_PACKAGES}" | tr ',' '\n')

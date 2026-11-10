@@ -1,4 +1,6 @@
 node_modules/
+build/
+.stage/
 dist/
 *.vsix
 tasks/PoofInstall/index.js

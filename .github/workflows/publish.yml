@@ -2,27 +2,92 @@ name: Publish Extension
 
 on:
   push:
-    tags:
-      - 'v[0-9]*.[0-9]*.[0-9]*'
+    tags: ['v[0-9]*.[0-9]*.[0-9]*']
+  workflow_dispatch:
+    inputs:
+      channel:
+        type: choice
+        options: [preview, production]
+        default: preview
+        required: true
+      tested_commit:
+        description: Full commit SHA that passed installed-extension Azure Pipelines tests (production only)
+        type: string
+      acceptance_run:
+        description: Successful Azure Pipelines acceptance run URL (production only)
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: marketplace-${{ inputs.channel || 'preview' }}
+  cancel-in-progress: false
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
+  package:
+    runs-on: ubuntu-24.04
+    env:
+      CHANNEL: ${{ inputs.channel || 'preview' }}
+      MARKETPLACE_PUBLISHER: ${{ vars.MARKETPLACE_PUBLISHER }}
+      MARKETPLACE_PUBLIC: ${{ inputs.channel == 'production' && vars.MARKETPLACE_PUBLIC || 'false' }}
+      RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: '20'
+          node-version: '24'
+          cache: npm
+      - name: Validate production release evidence
+        if: inputs.channel == 'production'
+        env:
+          TESTED_COMMIT: ${{ inputs.tested_commit }}
+          ACCEPTANCE_RUN: ${{ inputs.acceptance_run }}
+        run: |
+          test "$GITHUB_REF_TYPE" = tag
+          test "$TESTED_COMMIT" = "$GITHUB_SHA"
+          [[ "$ACCEPTANCE_RUN" =~ ^https://dev\.azure\.com/[^/]+/[^/]+/_build/results\?buildId=[0-9]+ ]]
+          test -n "$MARKETPLACE_PUBLISHER"
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm audit --omit=dev
+      - run: npm run package -- "$CHANNEL"
+      - name: Record artifact checksum
+        run: sha256sum dist/"$CHANNEL"/*.vsix > dist/"$CHANNEL"/SHA256SUMS
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: marketplace-vsix
+          path: dist/${{ env.CHANNEL }}/
+          if-no-files-found: error
 
-      - name: Install dependencies
-        run: npm install && npm run install:task
-
-      - name: Build task
-        run: npm run build:task
-
-      - name: Package extension
-        run: npx tfx extension create --manifest-globs vss-extension.json --output-path dist
-
-      - name: Publish to Marketplace
-        run: npx tfx extension publish --manifest-globs vss-extension.json --token "${{ secrets.MARKETPLACE_PAT }}"
+  publish:
+    needs: package
+    runs-on: ubuntu-24.04
+    environment: marketplace-${{ inputs.channel || 'preview' }}
+    env:
+      CHANNEL: ${{ inputs.channel || 'preview' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: marketplace-vsix
+          path: dist/${{ env.CHANNEL }}
+      - name: Verify packaged artifact
+        run: sha256sum --check dist/"$CHANNEL"/SHA256SUMS
+      - name: Publish tested VSIX
+        env:
+          MARKETPLACE_PAT: ${{ secrets.MARKETPLACE_PAT }}
+          TEST_ORGANIZATION: ${{ vars.AZURE_DEVOPS_TEST_ORG }}
+        run: |
+          test -n "$MARKETPLACE_PAT"
+          arguments=()
+          if [[ "$CHANNEL" = preview ]]; then
+            test -n "$TEST_ORGANIZATION"
+            arguments+=(--share-with "$TEST_ORGANIZATION")
+          fi
+          npx --no-install tfx extension publish --vsix dist/"$CHANNEL"/*.vsix --auth-type pat --token "$MARKETPLACE_PAT" "${arguments[@]}"

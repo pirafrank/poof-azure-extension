@@ -12,14 +12,20 @@ function getPoofBinDir(): string {
     if (os.platform() === 'darwin') {
         return path.join(os.homedir(), 'Library', 'Application Support', 'poof', 'bin');
     }
-    return path.join(os.homedir(), '.local', 'share', 'poof', 'bin');
+    const xdg = process.env.XDG_DATA_HOME;
+    const dataDir = xdg && path.isAbsolute(xdg) ? xdg : path.join(os.homedir(), '.local', 'share');
+    return path.join(dataDir, 'poof', 'bin');
 }
 
 function run(): void {
     try {
         const version: string       = task.getInput('version')      || 'latest';
         const packages: string      = task.getInput('packages')     || '';
-        const githubToken: string   = task.getInput('githubToken')  || '';
+        const githubToken: string   = task.getInput('token') || task.getInput('githubToken') || process.env.GITHUB_TOKEN || '';
+        if (githubToken) task.setSecret(githubToken);
+        if (/\$\([^)]+\)/.test(githubToken) || /[\r\n]/.test(githubToken)) {
+            throw new Error('GitHub token is unresolved or invalid; provide a secret variable or omit it');
+        }
 
         const installDir: string  = getInstallDir();
         const poofBinDir: string  = getPoofBinDir();
@@ -35,6 +41,7 @@ function run(): void {
             ...process.env,
             POOF_INSTALL_DIR: installDir,
             POOF_VERSION: version,
+            POOF_NODE: process.execPath,
             GITHUB_TOKEN: githubToken,
             // Ensure the install dir is in PATH for any child processes
             PATH: `${installDir}:${process.env.PATH || ''}`,

@@ -3,14 +3,25 @@
   "version": "1.0.0",
   "private": true,
   "description": "Azure DevOps Marketplace extension for poof — binary installer from GitHub Releases",
+  "workspaces": [
+    "tasks/PoofInstall"
+  ],
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
-    "install:task": "npm install --prefix tasks/PoofInstall",
-    "build": "npm run install:task && npm run build:task",
-    "build:task": "npm run build --prefix tasks/PoofInstall",
-    "package": "npm run build && tfx extension create --manifest-globs vss-extension.json --output-path dist",
-    "publish": "npm run package && tfx extension publish --manifest-globs vss-extension.json"
+    "build": "node scripts/build.mjs",
+    "lint": "tsc -p tasks/PoofInstall/tsconfig.json --noEmit && bash -n tasks/PoofInstall/install_poof.sh tasks/PoofInstall/install_packages.sh",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "check": "npm run lint && npm test && npm run validate",
+    "package": "npm run build && node scripts/package.mjs",
+    "validate": "node scripts/validate.mjs"
   },
   "devDependencies": {
-    "tfx-cli": "^0.17.0"
+    "@types/node": "24.10.1",
+    "adm-zip": "0.6.1",
+    "tfx-cli": "0.24.2",
+    "typescript": "5.9.3",
+    "yaml": "2.9.1"
   }
 }

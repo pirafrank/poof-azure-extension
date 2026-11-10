@@ -4,14 +4,7 @@
   "private": true,
   "description": "Azure DevOps task: install poof and pre-built binaries from GitHub Releases",
   "main": "index.js",
-  "scripts": {
-    "build": "tsc"
-  },
   "dependencies": {
-    "azure-pipelines-task-lib": "^4.0.0"
-  },
-  "devDependencies": {
-    "@types/node": "^20.0.0",
-    "typescript": "^5.0.0"
+    "azure-pipelines-task-lib": "5.283.0"
   }
 }

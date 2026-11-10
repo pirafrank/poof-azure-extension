@@ -1,0 +1,74 @@
+trigger: none
+pr: none
+
+parameters:
+  - name: agents
+    type: object
+    default:
+      - name: linux_x64
+        pool: { vmImage: ubuntu-24.04 }
+        os: Linux
+        arch: x86_64
+      - name: macos_x64
+        pool: { vmImage: macos-15 }
+        os: Darwin
+        arch: x86_64
+      - name: linux_arm64
+        pool: { name: poof-linux-arm64 }
+        os: Linux
+        arch: aarch64
+      - name: macos_arm64
+        pool: { name: poof-macos-arm64 }
+        os: Darwin
+        arch: arm64
+  - name: pinnedVersion
+    type: string
+    default: v0.5.2
+
+jobs:
+  - ${{ each agent in parameters.agents }}:
+    - job: ${{ agent.name }}
+      pool: ${{ agent.pool }}
+      steps:
+        - checkout: self
+        - bash: |
+            set -euo pipefail
+            test "$(uname -s)" = "$EXPECTED_OS"
+            test "$(uname -m)" = "$EXPECTED_ARCH"
+            TEST_HOME="$(Agent.TempDirectory)/poof-acceptance-$(Build.BuildId)"
+            mkdir -p "$TEST_HOME"
+            echo "##vso[task.setvariable variable=POOF_TEST_HOME]$TEST_HOME"
+          displayName: Verify actual agent platform and isolate home
+          env:
+            EXPECTED_OS: ${{ agent.os }}
+            EXPECTED_ARCH: ${{ agent.arch }}
+        - task: SetupPoofPreview@1
+          displayName: Download and validate pre-built poof
+          inputs:
+            version: ${{ parameters.pinnedVersion }}
+          env:
+            HOME: $(POOF_TEST_HOME)
+            XDG_DATA_HOME: $(POOF_TEST_HOME)/data
+        - task: SetupPoofPreview@1
+          displayName: Reuse poof and install packages through poof
+          inputs:
+            version: latest
+            packages: 'dandavison/delta@0.18.0,lsd-rs/lsd'
+          env:
+            HOME: $(POOF_TEST_HOME)
+            XDG_DATA_HOME: $(POOF_TEST_HOME)/data
+        - bash: |
+            set -euo pipefail
+            poof --version | grep -Fx "https://github.com/pirafrank/poof/releases/tag/$PINNED_VERSION"
+            delta --version
+            lsd --version
+          displayName: Verify installed tools in a subsequent step
+          env:
+            PINNED_VERSION: ${{ parameters.pinnedVersion }}
+            HOME: $(POOF_TEST_HOME)
+            XDG_DATA_HOME: $(POOF_TEST_HOME)/data
+        - bash: rm -rf "$TEST_HOME"
+          displayName: Remove isolated installation
+          condition: always()
+          env:
+            TEST_HOME: $(POOF_TEST_HOME)

@@ -1,186 +1,115 @@
-# poof Azure DevOps Extension
+# Setup poof for Azure Pipelines
 
-An [Azure DevOps Marketplace](https://marketplace.visualstudio.com/azuredevops) extension that
-installs [poof](https://github.com/pirafrank/poof) and optionally installs pre-built binaries
-of your choice from GitHub Releases into your pipeline.
+An Azure DevOps extension equivalent to the [Setup poof GitHub Action](https://github.com/marketplace/actions/setup-poof).
+It downloads an already-built [poof](https://github.com/pirafrank/poof) executable,
+validates it, and runs `poof install` for the requested packages.
+Package selection, downloads, archive handling, and installation belong to poof, not this extension.
 
-## What it does
-
-1. Bootstraps `poof` (a binary installer for GitHub Releases) at the requested version.
-2. Optionally installs any number of GitHub Release packages in one step.
-3. Prepends `poof` and the packages bin directory to `PATH` so installed tools are available
-   in all subsequent steps.
+This repository is prepared for private testing. Marketplace publication and installed-task
+certification on all target platforms are still required before a public release.
 
 ## Usage
 
-After installing the extension from the Marketplace, use the `Poof@1` task:
-
-### Minimal — install poof only
+After installing the extension into your Azure DevOps organization:
 
 ```yaml
 steps:
-  - task: Poof@1
-
-  - bash: poof --version
-    displayName: "Verify poof"
-```
-
-### Full — install poof and tools
-
-```yaml
-variables:
-  - group: my-variable-group   # must contain GITHUB_TOKEN as a secret
-
-steps:
-  - task: Poof@1
+  - task: SetupPoof@1
     inputs:
-      version: "latest"
       packages: |
-        pirafrank/vault-conductor@v0.3.0
-        ms-jpq/sad
-      githubToken: "$(GITHUB_TOKEN)"
-
+        lsd-rs/lsd
+        dandavison/delta@0.18.0
   - bash: |
-      vault-conductor --version
-      sad --version
-    displayName: "Use installed tools"
+      poof --version
+      lsd --version
+      delta --version
 ```
+
+Omit `packages` to install poof only. Commas and newlines separate package entries.
+Use `SetupPoofPreview@1` instead when testing the private preview extension.
+No repository-resource checkout or GitHub service connection is needed to use the task.
 
 ## Inputs
 
 | Input | Description | Default |
 |-------|-------------|---------|
-| `version` | Version of poof to bootstrap (e.g. `v0.6.0`). Use `latest` for the most recent release. | `latest` |
-| `packages` | Newline or comma-separated list of `USER/REPO` (or `USER/REPO@TAG`) entries to install. Leave empty to skip. | `""` |
-| `githubToken` | GitHub personal access token for authenticated API requests. Pass a pipeline secret using macro syntax (e.g. `$(MY_GITHUB_PAT)`). Avoids rate limiting. | `$(GITHUB_TOKEN)` |
+| `version` | Exact poof release, with or without `v`. `latest` reuses a recognized installed poof; otherwise it downloads the latest release. | `latest` |
+| `packages` | Comma/newline-separated `owner/repository` or `owner/repository@tag` entries. | Empty |
+| `token` | Optional GitHub token supplied through a secret variable. `githubToken` is an alias. | Empty |
 
-## Package format
+For reproducible builds, pin poof and package versions. The task's `@1` version is independent
+of the poof release selected by `version`.
 
-```
-pirafrank/vault-conductor         # latest release
-pirafrank/vault-conductor@v0.3.0  # specific tag
-ms-jpq/sad
-```
-
-Multiple packages can be separated by newlines or commas.
-
-## Rate limiting
-
-poof makes GitHub API calls to resolve releases. Without a token these are unauthenticated and
-subject to GitHub's [rate limit](https://docs.github.com/en/rest/overview/rate-limits-for-the-rest-api)
-(60 requests/hour per IP). Provide a GitHub personal access token to raise this to 5,000/hour.
-
-Store the token as a **secret pipeline variable** or in a **variable group**, then pass it:
+Azure Pipelines does not supply a built-in GitHub token. An optional secret reduces GitHub
+API rate limiting and is forwarded to poof through `GITHUB_TOKEN`:
 
 ```yaml
-- task: Poof@1
+- task: SetupPoof@1
   inputs:
-    githubToken: "$(MY_GITHUB_PAT)"
+    version: v0.5.2
+    token: $(MY_GITHUB_PAT)
+    packages: dandavison/delta@0.18.0
 ```
 
-## Supported platforms
+Store the token as a secret variable or in a variable group. Never put its literal value in
+YAML. An explicitly mapped `GITHUB_TOKEN` environment variable is also accepted, with the input
+taking precedence. An unresolved macro is an error. `System.AccessToken` is not a GitHub token.
 
-| OS | Architecture |
-|----|-------------|
-| Linux (glibc) | x86_64, aarch64, armv7, i686 |
-| Linux (musl) | x86_64, aarch64, armv7, i686 |
-| macOS | x86_64 (Intel), aarch64 (Apple Silicon) |
+## Binary validation
+
+The bootstrap downloads public poof release assets from `pirafrank/poof` over HTTPS.
+When release metadata advertises a SHA256 manifest, it must download successfully and its
+checksum must match before the executable is run. Corrupt manifests or mismatches fail the task.
+Only a regular root-level `poof` archive member is streamed into a temporary file; other
+archive paths are not extracted. The executable must report the exact upstream release URL
+for the requested version before replacing the installed file.
+
+Older releases without a checksum manifest produce an explicit warning and use HTTPS plus
+an executable/version check. Checksums obtained from the same GitHub release detect corruption;
+they do not independently authenticate the publisher. Sigstore signature verification is not
+implemented. Installed binaries are reused by identity/version, not rehashed against a release.
+Only install packages from publishers you trust: downloaded executables run with agent permissions.
+
+## Agent requirements
+
+Target platforms are Linux with glibc and macOS, each on x64 or ARM64. Azure DevOps Services
+agents must be version 4.278.0 or newer with the `Node24` task runner, Bash, curl, tar, and grep.
+Windows, Azure DevOps Server, native musl agents, i686, and armv7 are outside the initial scope.
+Target support is not a certification claim until the installed-extension acceptance matrix passes.
+
+The poof executable is installed in `$HOME/.local/bin`. Tools managed by poof use
+`$XDG_DATA_HOME/poof/bin` on Linux when XDG_DATA_HOME is absolute, otherwise
+`$HOME/.local/share/poof/bin`; macOS uses `$HOME/Library/Application Support/poof/bin`.
+Both directories are added to PATH for subsequent steps. No shell profile is modified.
+Self-hosted agents reuse their installation across runs; concurrent jobs should use separate homes.
 
 ## Development
 
-### Prerequisites
+Use Node.js 24 and run from the repository root:
 
-- Node.js 20+
-- `bash` available on the agent (standard on Linux/macOS agents)
-
-### Build
-
-```bash
-# Install root dev dependencies (tfx-cli)
-npm install
-
-# Install task dependencies and compile TypeScript
-npm run build
-```
-
-### Package
-
-```bash
-# Produces a .vsix file in dist/
+```sh
+npm ci --ignore-scripts
+npm run check
+npm audit --omit=dev
 npm run package
 ```
 
-> **Note**: A `128×128` PNG named `images/icon.png` is required before packaging.
-> See [`images/ICON_REQUIRED.md`](images/ICON_REQUIRED.md) for details.
+Tests mock downloads and use fixture executables; they do not install packages into your real home.
+Packaging stages compiled wrapper code, shell scripts, and locked production dependencies.
+The VSIX is checked for missing runtime files and development content, then its unpacked handler
+is executed without repository dependencies. Agents do not need npm or a Rust toolchain.
 
-### Publish
+`npm run package` creates a private preview VSIX in `dist/preview` with a separate task GUID
+and the name `SetupPoofPreview`. `npm run package -- production` creates the production identity
+in `dist/production`, still private by default. Local packaging never publishes anything.
 
-**1. Create a publisher account**
+## Privacy and support
 
-Go to [marketplace.visualstudio.com/manage](https://marketplace.visualstudio.com/manage) and
-create a publisher. Update the `publisher` field in [`vss-extension.json`](vss-extension.json)
-to match.
-
-**2. Make the extension public (optional)**
-
-By default `galleryFlags` in `vss-extension.json` is empty, so the extension publishes as
-**private** (only visible to your publisher account and organizations you explicitly share it
-with). To list it publicly on the Marketplace, change the field before publishing:
-
-```json
-"galleryFlags": ["Public"]
-```
-
-A public listing requires Marketplace review and a valid icon, description, and README.
-
-**3. Create a Marketplace PAT**
-
-In Azure DevOps, create a Personal Access Token with **Marketplace → Manage** scope.
-
-**4. Publish**
-
-```bash
-# Publish directly (prompts for PAT)
-npm run publish
-
-# Or set the token as an env var
-MARKETPLACE_PAT=<token> npx tfx extension publish --manifest-globs vss-extension.json --token "$MARKETPLACE_PAT"
-```
-
-### Automated publishing via GitHub Actions
-
-Push a semver tag (e.g. `v1.0.0`) to trigger the
-[publish workflow](.github/workflows/publish.yml). The workflow requires a
-`MARKETPLACE_PAT` secret set in the GitHub repository settings.
-
-### Task UUID
-
-The `id` in [`tasks/PoofInstall/task.json`](tasks/PoofInstall/task.json) is a UUID that
-**must not change** after the first publish — Azure DevOps uses it to identify the task
-across versions. Generate a new one before first publishing:
-
-```bash
-node -e "const {randomUUID}=require('crypto'); console.log(randomUUID())"
-```
-
-## Repository structure
-
-```
-tasks/
-  PoofInstall/
-    task.json           ← task manifest (id, inputs, execution handler)
-    index.ts            ← Node.js task entry point
-    install_poof.sh     ← poof bootstrap script
-    install_packages.sh ← package installation script
-    package.json        ← task dependencies (azure-pipelines-task-lib)
-    tsconfig.json
-images/
-  icon.png              ← 128×128 PNG required for Marketplace (add before packaging)
-vss-extension.json      ← extension manifest
-package.json            ← root: tfx-cli, build/package/publish scripts
-.github/workflows/
-  publish.yml           ← GitHub Actions: auto-publish on semver tag
-```
+The extension adds no telemetry. It contacts GitHub for release metadata and public poof assets;
+poof makes its own requests for selected packages. The GitHub token is passed to the bootstrap
+and poof process, registered for Azure log masking, and is not stored in the VSIX or shell profiles.
+See [poof](https://github.com/pirafrank/poof) for the CLI's behavior and security documentation.
+Report extension problems through [GitHub Issues](https://github.com/pirafrank/poof-azure-extension/issues).
 
 ## License
 
