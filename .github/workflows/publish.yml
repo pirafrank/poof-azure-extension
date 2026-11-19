@@ -1,4 +1,5 @@
 name: Publish Extension
+run-name: Publish Extension to ${{ inputs.channel || 'preview' }}
 
 on:
   push:
@@ -82,12 +83,52 @@ jobs:
       - name: Publish tested VSIX
         env:
           MARKETPLACE_PAT: ${{ secrets.MARKETPLACE_PAT }}
+          MARKETPLACE_PUBLISHER: ${{ vars.MARKETPLACE_PUBLISHER }}
           TEST_ORGANIZATION: ${{ vars.AZURE_DEVOPS_TEST_ORG }}
         run: |
           test -n "$MARKETPLACE_PAT"
+          test -n "$MARKETPLACE_PUBLISHER"
           arguments=()
           if [[ "$CHANNEL" = preview ]]; then
             test -n "$TEST_ORGANIZATION"
             arguments+=(--share-with "$TEST_ORGANIZATION")
           fi
-          npx --no-install tfx extension publish --vsix dist/"$CHANNEL"/*.vsix --auth-type pat --token "$MARKETPLACE_PAT" "${arguments[@]}"
+          node node_modules/tfx-cli/_build/tfx-cli.js extension publish --vsix dist/"$CHANNEL"/*.vsix --auth-type pat --token "$MARKETPLACE_PAT" --no-wait-validation "${arguments[@]}"
+
+          extension_id=poof-installer
+          if [[ "$CHANNEL" = preview ]]; then
+            extension_id+=-preview
+          fi
+          version="$(node -p "require('./package.json').version")"
+          echo "Waiting for Marketplace validation of $MARKETPLACE_PUBLISHER.$extension_id@$version (maximum 30 minutes)."
+          deadline=$((SECONDS + 1800))
+          attempt=0
+          while (( SECONDS < deadline )); do
+            validation="$(node node_modules/tfx-cli/_build/tfx-cli.js extension isvalid \
+              --publisher "$MARKETPLACE_PUBLISHER" \
+              --extension-id "$extension_id" \
+              --version "$version" \
+              --service-url https://marketplace.visualstudio.com/ \
+              --token "$MARKETPLACE_PAT" \
+              --json)"
+            status="$(printf '%s' "$validation" | node -p "JSON.parse(require('node:fs').readFileSync(0, 'utf8')).status")"
+            case "$status" in
+              success)
+                echo "Marketplace validation succeeded for $MARKETPLACE_PUBLISHER.$extension_id@$version."
+                exit 0
+                ;;
+              pending)
+                attempt=$((attempt + 1))
+                if (( attempt % 4 == 1 )); then
+                  echo "Marketplace validation is still pending."
+                fi
+                sleep 30
+                ;;
+              *)
+                echo "Marketplace validation failed: $validation" >&2
+                exit 1
+                ;;
+            esac
+          done
+          echo "Marketplace validation did not finish within 30 minutes. Check its status before retrying publication." >&2
+          exit 1
