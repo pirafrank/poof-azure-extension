@@ -29,6 +29,11 @@ Omit `packages` to install poof only. Commas and newlines separate package entri
 Use `SetupPoofPreview@1` instead when testing the private preview extension.
 No repository-resource checkout or GitHub service connection is needed to use the task.
 
+For a private preview, sharing the extension with an organization does not install it. An
+organization administrator must install the shared extension into that organization before
+pipelines can resolve `SetupPoofPreview@1`. See Microsoft's
+[Azure DevOps extension installation guide](https://learn.microsoft.com/en-us/azure/devops/marketplace/install-extension).
+
 ## Inputs
 
 | Input | Description | Default |
@@ -99,9 +104,33 @@ Packaging stages compiled wrapper code, shell scripts, and locked production dep
 The VSIX is checked for missing runtime files and development content, then its unpacked handler
 is executed without repository dependencies. Agents do not need npm or a Rust toolchain.
 
+Before each Marketplace upload, bump the extension and task version together with:
+
+```sh
+just bump-version 1.0.1
+```
+
+Replace `1.0.1` with the new `MAJOR.MINOR.PATCH` version. This updates the package manifests,
+task manifest, extension manifest, and npm lockfile. Commit the changes before publishing.
+Preview and production use separate extension identities, so the same version can be published
+to preview first and then production when promoting the same code. Bump the version for the next
+upload to an identity that has already successfully published that version; do not retry a
+successful publication with the same version.
+
+For a production workflow dispatch, provide both acceptance evidence fields:
+
+- `tested_commit`: the full Git commit SHA of the release tag, which must be the exact commit
+  that passed the installed-extension Azure Pipelines acceptance tests.
+- `acceptance_run`: the URL of that successful Azure Pipelines run, in this format:
+  `https://dev.azure.com/ORG/PROJECT/_build/results?buildId=NUMBER`.
+
+Confirm the run succeeded on that exact commit and covered all required platforms. The workflow
+checks the evidence format and commit match; it does not query Azure Pipelines to verify the run.
+
 `npm run package` creates a private preview VSIX in `dist/preview` with a separate task GUID
 and the name `SetupPoofPreview`. `npm run package -- production` creates the production identity
 in `dist/production`, still private by default. Local packaging never publishes anything.
+Each upload needs a new extension version; don’t rerun a successful publication with the same version.
 
 ## Privacy and support
 
