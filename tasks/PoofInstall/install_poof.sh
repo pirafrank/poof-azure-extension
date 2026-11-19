@@ -29,12 +29,7 @@ case "$ARCH" in
 esac
 case "$OS" in
   Linux)
-    LDD_OUT=$(ldd --version 2>&1 || true)
-    if ! printf '%s\n' "$LDD_OUT" | grep -qi 'glibc\|gnu libc'; then
-      echo "Linux agents require glibc and the Node24 task runner" >&2
-      exit 1
-    fi
-    TARGET="${ARCH}-unknown-linux-gnu"
+    TARGET="${ARCH}-unknown-linux-musl"
     ;;
   Darwin) TARGET="${ARCH}-apple-darwin" ;;
   *) echo "Unsupported OS: $OS" >&2; exit 1 ;;

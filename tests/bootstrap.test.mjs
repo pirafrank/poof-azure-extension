@@ -21,7 +21,7 @@ function fixture(context, options = {}) {
     writeFileSync(path.join(payload, 'poof'), options.invalidBinary ? '#!/bin/sh\necho unrelated\n' : executable(options.binaryVersion || 'v0.6.0'), { mode: 0o755 });
     const archive = path.join(directory, 'release.tar.gz');
     execFileSync('tar', ['-czf', archive, '-C', payload, 'poof']);
-    const filename = 'poof-0.6.0-x86_64-unknown-linux-gnu.tar.gz';
+    const filename = 'poof-0.6.0-x86_64-unknown-linux-musl.tar.gz';
     const digest = options.badChecksum ? '0'.repeat(64) : createHash('sha256').update(readFileSync(archive)).digest('hex');
     const manifest = path.join(directory, 'checksums.txt');
     writeFileSync(manifest, `${digest}  ${filename}\n`);
@@ -37,7 +37,6 @@ else if (url.endsWith('checksums.txt')) { if (process.env.TEST_CHECKSUM_FAILURE)
 else fs.copyFileSync(process.env.TEST_ARCHIVE, output);
 `, { mode: 0o755 });
     writeFileSync(path.join(bin, 'uname'), '#!/bin/sh\nif [ "$1" = -s ]; then echo Linux; else echo x86_64; fi\n', { mode: 0o755 });
-    writeFileSync(path.join(bin, 'ldd'), '#!/bin/sh\necho "GNU libc"\n', { mode: 0o755 });
     if (options.existing) writeFileSync(path.join(install, 'poof'), executable(options.existing), { mode: 0o755 });
     const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, POOF_NODE: process.execPath, POOF_INSTALL_DIR: install,
         POOF_VERSION: options.version || 'v0.6.0', GITHUB_TOKEN: '', TEST_METADATA: metadata, TEST_MANIFEST: manifest, TEST_ARCHIVE: archive, TEST_LOG: log,
