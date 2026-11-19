@@ -50,6 +50,7 @@ else fs.copyFileSync(process.env.TEST_ARCHIVE, output);
     writeFileSync(path.join(bin, 'uname'), '#!/bin/sh\nif [ "$1" = -s ]; then echo Linux; else echo x86_64; fi\n', { mode: 0o755 });
     if (options.existing) writeFileSync(path.join(install, 'poof'), executable(options.existing), { mode: 0o755 });
     const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, POOF_NODE: process.execPath, POOF_INSTALL_DIR: install,
+        TF_BUILD: options.azure ? 'True' : '',
         POOF_VERSION: options.version || 'v0.6.0', GITHUB_TOKEN: '', TEST_METADATA: metadata, TEST_MANIFEST: manifest, TEST_ARCHIVE: archive, TEST_LOG: log,
         TEST_CHECKSUM_FAILURE: options.checksumFailure ? 'yes' : '', TEST_BUNDLE: bundle,
         TEST_DOWNLOAD_FAILURE: options.downloadFailure || '' };
@@ -91,6 +92,23 @@ test('a missing manifest does not disable the GitHub API archive digest check', 
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stderr, /has no checksum manifest/);
     assert.match(result.stdout, /Verified poof archive SHA256 against GitHub release metadata/);
+});
+
+test('verification fallbacks register Azure task warnings on stdout', context => {
+    for (const options of [{}, { noChecksum: true }, { noChecksum: true, noApiDigest: true }, { checksumFailure: true }]) {
+        const item = fixture(context, { ...options, azure: true });
+        const result = item.run();
+        assert.equal(result.status, 0, result.stderr);
+        const warnings = result.stdout.split('\n').filter(line => line.startsWith('##vso[task.logissue type=warning;]'));
+        assert.ok(warnings.some(line => /Sigstore signature/.test(line)), result.stdout);
+        if (options.checksumFailure) {
+            assert.ok(warnings.some(line => /manifest could not be downloaded/.test(line)));
+        }
+        if (options.noApiDigest) {
+            assert.ok(warnings.some(line => /did not provide an archive SHA256 digest/.test(line)));
+        }
+        assert.doesNotMatch(result.stderr, /Warning:/);
+    }
 });
 
 test('GitHub API archive digest mismatch prevents installation', context => {

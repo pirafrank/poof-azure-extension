@@ -113,7 +113,11 @@ if [[ "$HAS_CHECKSUM" == yes ]]; then
     echo "Could not download the poof checksum manifest and GitHub API supplied no archive digest." >&2
     exit 1
   else
-    echo "Warning: poof checksum manifest could not be downloaded; GitHub API digest was verified." >&2
+    if [[ "${TF_BUILD:-}" == [Tt][Rr][Uu][Ee] ]]; then
+      echo "##vso[task.logissue type=warning;]poof checksum manifest could not be downloaded; falling back to the GitHub API digest."
+    else
+      echo "Warning: poof checksum manifest could not be downloaded; falling back to the GitHub API digest." >&2
+    fi
   fi
 fi
 

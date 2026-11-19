@@ -3,6 +3,15 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 
+function warn(message) {
+    if (process.env.TF_BUILD?.toLowerCase() === 'true') {
+        const escaped = message.replaceAll('%', '%AZP25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
+        console.log(`##vso[task.logissue type=warning;]${escaped}`);
+    } else {
+        console.warn(message);
+    }
+}
+
 const [archivePath, archiveName, apiDigest, manifestPath, bundlePath, tag] = process.argv.slice(2);
 
 if (!archivePath || !archiveName || !tag) {
@@ -19,7 +28,7 @@ if (apiDigest) {
     }
     console.log('Verified poof archive SHA256 against GitHub release metadata');
 } else {
-    console.warn(`Warning: GitHub API did not provide an archive SHA256 digest for ${archiveName}.`);
+    warn(`Warning: GitHub API did not provide an archive SHA256 digest for ${archiveName}.`);
 }
 
 if (manifestPath && manifestPath !== '-') {
@@ -44,7 +53,7 @@ if (manifestPath && manifestPath !== '-') {
             throw new Error(`poof checksum manifest Sigstore signature verification failed: ${error.message}`);
         }
     } else {
-        console.warn(`Warning: poof release ${tag} has no available Sigstore signature bundle; continuing with digest checks.`);
+        warn(`Warning: poof release ${tag} has no available Sigstore signature bundle; continuing with digest checks.`);
     }
 
     const entries = manifest.toString('utf8').split(/\r?\n/).filter(Boolean).map(line => {
@@ -66,7 +75,7 @@ if (manifestPath && manifestPath !== '-') {
     }
     console.log('Verified poof archive SHA256 against the release checksum manifest');
 } else if (apiDigest) {
-    console.warn(`Warning: release ${tag} has no checksum manifest; the GitHub API digest was verified.`);
+    warn(`Warning: release ${tag} has no checksum manifest; Sigstore signature verification is unavailable. The GitHub API digest was verified.`);
 } else {
-    console.warn(`Warning: release ${tag} has no checksum manifest or GitHub API digest; validation uses HTTPS and executable version only.`);
+    warn(`Warning: release ${tag} has no checksum manifest or GitHub API digest; Sigstore signature verification is unavailable. Validation uses HTTPS and executable version only.`);
 }
