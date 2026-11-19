@@ -11,6 +11,7 @@ INSTALL_DIR="${POOF_INSTALL_DIR:?}"
 NODE="${POOF_NODE:-node}"
 TAG="${POOF_VERSION:-latest}"
 RELEASE_URL="https://github.com/pirafrank/poof/releases/tag"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ "$TAG" != latest ]]; then
   [[ "$TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9._-]+)?$ ]] || {
@@ -39,8 +40,16 @@ binary_version() {
   "$NODE" -e '
     const {execFileSync} = require("node:child_process");
     const env = {...process.env}; delete env.GITHUB_TOKEN;
-    try { process.stdout.write(execFileSync(process.argv[1], ["--version"], {env, timeout: 10000})); }
-    catch { process.exit(1); }
+    try {
+      process.stdout.write(execFileSync(process.argv[1], ["--version"], {
+        env, timeout: 10000, killSignal: "SIGKILL", encoding: "utf8",
+      }));
+    } catch (error) {
+      console.error(error.code === "ETIMEDOUT"
+        ? "poof version check timed out after 10 seconds"
+        : "poof version check failed");
+      process.exit(1);
+    }
   ' "$1"
 }
 
@@ -72,15 +81,8 @@ if [[ -n "${GITHUB_TOKEN:-}" ]]; then
 else
   curl "${CURL_ARGS[@]}" -H 'Accept: application/vnd.github+json' "$API_URL" -o "$TMP/release.json"
 fi
-RELEASE_INFO="$("$NODE" -e '
-  const release = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
-  if (!/^v\d+\.\d+\.\d+(?:-[a-zA-Z0-9._-]+)?$/.test(release.tag_name) || !Array.isArray(release.assets)) {
-    throw new Error("Invalid poof release metadata");
-  }
-  const name = `poof-${release.tag_name.slice(1)}-checksums.txt`;
-  console.log(release.tag_name, release.assets.some(asset => asset.name === name) ? "yes" : "no");
-' "$TMP/release.json")"
-read -r RESOLVED_TAG HAS_CHECKSUM <<< "$RELEASE_INFO"
+RELEASE_INFO="$("$NODE" "$SCRIPT_DIR/release-metadata.mjs" "$TMP/release.json" "$TARGET")"
+IFS=$'\t' read -r RESOLVED_TAG HAS_CHECKSUM HAS_SIGSTORE API_DIGEST <<< "$RELEASE_INFO"
 if [[ "$TAG" != latest && "$TAG" != "$RESOLVED_TAG" ]]; then
   echo "Resolved release does not match requested poof version" >&2
   exit 1
@@ -91,24 +93,36 @@ FILENAME="poof-${VERSION}-${TARGET}.tar.gz"
 BASE_URL="https://github.com/pirafrank/poof/releases/download/$TAG"
 curl "${CURL_ARGS[@]}" "$BASE_URL/$FILENAME" -o "$TMP/$FILENAME"
 
+MANIFEST_PATH=-
+BUNDLE_PATH=-
 if [[ "$HAS_CHECKSUM" == yes ]]; then
-  curl "${CURL_ARGS[@]}" "$BASE_URL/poof-$VERSION-checksums.txt" -o "$TMP/checksums.txt"
-  "$NODE" -e '
-    const fs = require("node:fs");
-    const crypto = require("node:crypto");
-    const entries = fs.readFileSync(process.argv[1], "utf8").split(/\r?\n/).filter(Boolean).map(line => {
-      const entry = /^([a-fA-F0-9]{64}) [ *](.+)$/.exec(line);
-      if (!entry) throw new Error("Malformed checksum manifest");
-      return {hash: entry[1].toLowerCase(), name: entry[2]};
-    });
-    if (new Set(entries.map(entry => entry.name)).size !== entries.length) throw new Error("Duplicate checksum entry");
-    const expected = entries.find(entry => entry.name === process.argv[3]);
-    const actual = crypto.createHash("sha256").update(fs.readFileSync(process.argv[2])).digest("hex");
-    if (!expected || expected.hash !== actual) throw new Error("poof archive SHA256 checksum mismatch");
-  ' "$TMP/checksums.txt" "$TMP/$FILENAME" "$FILENAME"
-else
-  echo "Warning: release $TAG has no checksum manifest; validation uses HTTPS and executable version only." >&2
+  if curl "${CURL_ARGS[@]}" "$BASE_URL/poof-$VERSION-checksums.txt" -o "$TMP/checksums.txt"; then
+    MANIFEST_PATH="$TMP/checksums.txt"
+    if [[ "$HAS_SIGSTORE" == yes ]]; then
+      if curl "${CURL_ARGS[@]}" "$BASE_URL/poof-$VERSION-checksums.txt.sigstore.json" -o "$TMP/checksums.sigstore.json"; then
+        BUNDLE_PATH="$TMP/checksums.sigstore.json"
+      else
+        echo "Could not download the advertised poof checksum manifest signature bundle." >&2
+        exit 1
+      fi
+    fi
+  elif [[ "$HAS_SIGSTORE" == yes ]]; then
+    echo "Could not download the poof checksum manifest required for signature verification." >&2
+    exit 1
+  elif [[ -z "$API_DIGEST" ]]; then
+    echo "Could not download the poof checksum manifest and GitHub API supplied no archive digest." >&2
+    exit 1
+  else
+    echo "Warning: poof checksum manifest could not be downloaded; GitHub API digest was verified." >&2
+  fi
 fi
+
+if [[ "$HAS_SIGSTORE" == yes && "$MANIFEST_PATH" == - ]]; then
+  echo "Advertised poof signature bundle has no checksum manifest to verify." >&2
+  exit 1
+fi
+
+"$NODE" "$SCRIPT_DIR/verify-release.mjs" "$TMP/$FILENAME" "$FILENAME" "$API_DIGEST" "$MANIFEST_PATH" "$BUNDLE_PATH" "$TAG"
 
 MEMBERS="$(tar -tzf "$TMP/$FILENAME")"
 MEMBER="$(printf '%s\n' "$MEMBERS" | grep -Ex '(\./)?poof' || true)"

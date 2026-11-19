@@ -23,16 +23,27 @@ function fixture(context, options = {}) {
     execFileSync('tar', ['-czf', archive, '-C', payload, 'poof']);
     const filename = 'poof-0.6.0-x86_64-unknown-linux-musl.tar.gz';
     const digest = options.badChecksum ? '0'.repeat(64) : createHash('sha256').update(readFileSync(archive)).digest('hex');
+    const archiveDigest = createHash('sha256').update(readFileSync(archive)).digest('hex');
     const manifest = path.join(directory, 'checksums.txt');
     writeFileSync(manifest, `${digest}  ${filename}\n`);
+    const bundle = path.join(directory, 'checksums.sigstore.json');
+    writeFileSync(bundle, JSON.stringify({ mediaType: 'invalid-test-bundle' }));
     const metadata = path.join(directory, 'release.json');
-    writeFileSync(metadata, JSON.stringify({ tag_name: 'v0.6.0', assets: options.noChecksum ? [] : [{ name: 'poof-0.6.0-checksums.txt' }] }));
+    const assets = [{
+        name: filename,
+        ...(options.noApiDigest ? {} : { digest: `sha256:${options.badApiDigest ? '0'.repeat(64) : archiveDigest}` }),
+    }];
+    if (!options.noChecksum) assets.push({ name: 'poof-0.6.0-checksums.txt' });
+    if (options.withSignature) assets.push({ name: 'poof-0.6.0-checksums.txt.sigstore.json' });
+    writeFileSync(metadata, JSON.stringify({ tag_name: 'v0.6.0', assets }));
     const log = path.join(directory, 'curl.log');
     writeFileSync(path.join(bin, 'curl'), `#!${process.execPath}\nconst fs = require('node:fs');
 const args = process.argv.slice(2); const url = args.find(arg => arg.startsWith('https://'));
 fs.appendFileSync(process.env.TEST_LOG, url + '\\n');
 const output = args[args.indexOf('-o') + 1];
+if (process.env.TEST_DOWNLOAD_FAILURE && url.endsWith(process.env.TEST_DOWNLOAD_FAILURE)) process.exit(22);
 if (url.includes('api.github.com')) fs.copyFileSync(process.env.TEST_METADATA, output);
+else if (url.endsWith('.sigstore.json')) fs.copyFileSync(process.env.TEST_BUNDLE, output);
 else if (url.endsWith('checksums.txt')) { if (process.env.TEST_CHECKSUM_FAILURE) process.exit(22); fs.copyFileSync(process.env.TEST_MANIFEST, output); }
 else fs.copyFileSync(process.env.TEST_ARCHIVE, output);
 `, { mode: 0o755 });
@@ -40,14 +51,17 @@ else fs.copyFileSync(process.env.TEST_ARCHIVE, output);
     if (options.existing) writeFileSync(path.join(install, 'poof'), executable(options.existing), { mode: 0o755 });
     const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, POOF_NODE: process.execPath, POOF_INSTALL_DIR: install,
         POOF_VERSION: options.version || 'v0.6.0', GITHUB_TOKEN: '', TEST_METADATA: metadata, TEST_MANIFEST: manifest, TEST_ARCHIVE: archive, TEST_LOG: log,
-        TEST_CHECKSUM_FAILURE: options.checksumFailure ? 'yes' : '' };
-    return { directory, install, env, log, run: () => spawnSync('bash', [bootstrap], { env, encoding: 'utf8' }) };
+        TEST_CHECKSUM_FAILURE: options.checksumFailure ? 'yes' : '', TEST_BUNDLE: bundle,
+        TEST_DOWNLOAD_FAILURE: options.downloadFailure || '' };
+    return { directory, install, payload, archive, env, log, run: () => spawnSync('bash', [bootstrap], { env, encoding: 'utf8', timeout: 15000 }) };
 }
 
 test('downloads a pre-built executable, validates checksum and version, and installs it', context => {
     const item = fixture(context);
     const result = item.run();
     assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /no available Sigstore signature bundle/);
+    assert.match(result.stdout, /Verified poof archive SHA256 against the release checksum manifest/);
     assert.match(execFileSync(path.join(item.install, 'poof'), ['--version'], { encoding: 'utf8' }), /v0\.6\.0/);
 });
 
@@ -71,11 +85,94 @@ test('checksum mismatch leaves the existing executable untouched', context => {
     assert.match(readFileSync(path.join(item.install, 'poof'), 'utf8'), /v0\.5\.2/);
 });
 
-test('a declared checksum download failure cannot silently downgrade validation', context => {
+test('a missing manifest does not disable the GitHub API archive digest check', context => {
+    const item = fixture(context, { noChecksum: true });
+    const result = item.run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /has no checksum manifest/);
+    assert.match(result.stdout, /Verified poof archive SHA256 against GitHub release metadata/);
+});
+
+test('GitHub API archive digest mismatch prevents installation', context => {
+    const item = fixture(context, { badApiDigest: true });
+    const result = item.run();
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /digest from GitHub API does not match/);
+    assert.equal(existsSync(path.join(item.install, 'poof')), false);
+});
+
+test('a failed manifest download can fall back to the verified API digest', context => {
     const item = fixture(context, { checksumFailure: true });
+    const result = item.run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /manifest could not be downloaded/);
+    assert.match(result.stdout, /Verified poof archive SHA256 against GitHub release metadata/);
+});
+
+test('a failed manifest download cannot downgrade validation when the API digest is absent', context => {
+    const item = fixture(context, { checksumFailure: true, noApiDigest: true });
     assert.notEqual(item.run().status, 0);
     assert.equal(existsSync(path.join(item.install, 'poof')), false);
 });
+
+test('a present but invalid Sigstore bundle prevents installation', context => {
+    const item = fixture(context, { withSignature: true });
+    const result = item.run();
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Sigstore signature verification failed/);
+    assert.equal(existsSync(path.join(item.install, 'poof')), false);
+});
+
+test('advertised signatures cannot be bypassed by failed or missing downloads', context => {
+    for (const options of [
+        { downloadFailure: '.sigstore.json' },
+        { downloadFailure: '.sigstore.json', noApiDigest: true },
+        { checksumFailure: true },
+        { noChecksum: true },
+    ]) {
+        const item = fixture(context, { withSignature: true, existing: 'v0.5.2', ...options });
+        const result = item.run();
+        assert.equal(result.error, undefined);
+        assert.notEqual(result.status, 0);
+        assert.match(result.stderr, /signature/);
+        assert.match(readFileSync(path.join(item.install, 'poof'), 'utf8'), /v0\.5\.2/);
+    }
+});
+
+test('metadata and archive download failures preserve the existing executable', context => {
+    for (const downloadFailure of ['/tags/v0.6.0', '.tar.gz']) {
+        const item = fixture(context, { downloadFailure, existing: 'v0.5.2' });
+        const result = item.run();
+        assert.equal(result.error, undefined);
+        assert.notEqual(result.status, 0);
+        assert.match(readFileSync(path.join(item.install, 'poof'), 'utf8'), /v0\.5\.2/);
+    }
+});
+
+for (const location of ['existing', 'downloaded']) {
+    test(`a stalled ${location} version check fails within its timeout`, context => {
+        const item = fixture(context, location === 'downloaded' ? { noChecksum: true, noApiDigest: true } : {});
+        // Ignore SIGTERM so the check must forcibly terminate the executable.
+        const stalled = `#!${process.execPath}\nprocess.on('SIGTERM', () => {}); setInterval(() => {}, 1000);\n`;
+        const binary = path.join(location === 'existing' ? item.install : item.payload, 'poof');
+        writeFileSync(binary, stalled, { mode: 0o755 });
+        if (location === 'downloaded') {
+            execFileSync('tar', ['-czf', item.archive, '-C', item.payload, 'poof']);
+        }
+        const started = Date.now();
+        const result = item.run();
+        assert.equal(result.error, undefined, 'bootstrap exceeded the outer test timeout');
+        assert.notEqual(result.status, 0);
+        assert.ok(Date.now() - started < 14000);
+        if (location === 'existing') {
+            assert.equal(readFileSync(binary, 'utf8'), stalled);
+            assert.equal(existsSync(item.log), false);
+        } else {
+            assert.match(result.stderr, /version check timed out/);
+            assert.equal(existsSync(path.join(item.install, 'poof')), false);
+        }
+    });
+}
 
 test('rejects a downloaded executable with the wrong identity or version', context => {
     for (const options of [{ invalidBinary: true }, { binaryVersion: 'v0.5.2' }]) {
@@ -85,11 +182,11 @@ test('rejects a downloaded executable with the wrong identity or version', conte
     }
 });
 
-test('historical releases without checksums explicitly warn and still verify version', context => {
-    const item = fixture(context, { noChecksum: true });
+test('historical releases without checksum manifests or API digests warn and still verify version', context => {
+    const item = fixture(context, { noChecksum: true, noApiDigest: true });
     const result = item.run();
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stderr, /no checksum manifest/);
+    assert.match(result.stderr, /no checksum manifest or GitHub API digest/);
 });
 
 test('invalid requested versions fail before any download', context => {

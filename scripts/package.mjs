@@ -9,6 +9,19 @@ import AdmZip from 'adm-zip';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const mode = process.argv[2] || 'preview';
 assert.ok(['preview', 'production'].includes(mode), 'Use preview or production');
+
+function removeBinDirectories(directory) {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+        const entryPath = path.join(directory, entry.name);
+        if (entry.name === '.bin') {
+            rmSync(entryPath, { recursive: true, force: true });
+        } else {
+            removeBinDirectories(entryPath);
+        }
+    }
+}
+
 execFileSync(process.execPath, [path.join(root, 'scripts/validate.mjs')], { stdio: 'inherit' });
 const stage = path.join(root, '.stage', mode);
 rmSync(stage, { recursive: true, force: true });
@@ -23,7 +36,11 @@ rmSync(path.join(dependencies, 'node_modules/poof-install-task'), { force: true 
 rmSync(path.join(dependencies, 'node_modules/.bin'), { recursive: true, force: true });
 const taskDirectory = path.join(stage, 'tasks/PoofInstall');
 cpSync(path.join(root, 'build/task'), taskDirectory, { recursive: true });
-cpSync(path.join(dependencies, 'node_modules'), path.join(taskDirectory, 'node_modules'), { recursive: true });
+cpSync(path.join(dependencies, 'node_modules'), path.join(taskDirectory, 'node_modules'), {
+    recursive: true,
+    dereference: true,
+});
+removeBinDirectories(path.join(taskDirectory, 'node_modules'));
 rmSync(dependencies, { recursive: true, force: true });
 cpSync(path.join(root, 'images'), path.join(stage, 'images'), { recursive: true });
 cpSync(path.join(root, 'images/poof_tx_bg_128x128.png'), path.join(taskDirectory, 'icon.png'));
@@ -51,10 +68,22 @@ assert.equal(files.length, 1);
 const vsix = path.join(destination, files[0]);
 const archive = new AdmZip(vsix);
 const names = archive.getEntries().map(entry => entry.entryName);
-for (const filename of ['index.js', 'install_poof.sh', 'install_packages.sh', 'node_modules/azure-pipelines-task-lib/task.js']) {
+for (const filename of [
+    'index.js',
+    'install_poof.sh',
+    'install_packages.sh',
+    'release-metadata.mjs',
+    'verify-release.mjs',
+    'node_modules/azure-pipelines-task-lib/task.js',
+    'node_modules/sigstore/dist/index.js',
+]) {
     assert.ok(names.includes(`tasks/PoofInstall/${filename}`), `Missing runtime file: ${filename}`);
 }
-assert.ok(!names.some(name => /(^|\/)(?:\.env|\.git|tests|typescript|tfx-cli)(\/|$)/.test(name)), 'VSIX contains development or sensitive files');
+assert.ok(!names.some(name =>
+    /(^|\/)(?:\.env|\.git)(\/|$)/.test(name)
+    || /^(?:tests|typescript|tfx-cli)(\/|$)/.test(name)
+    || /^tasks\/PoofInstall\/node_modules\/(?:typescript|tfx-cli)(\/|$)/.test(name)
+), 'VSIX contains development or sensitive files');
 assert.ok(readFileSync(vsix).length < 50 * 1024 * 1024, 'VSIX exceeds 50 MB');
 const extracted = mkdtempSync(path.join(tmpdir(), 'poof-vsix-'));
 try {
@@ -65,7 +94,7 @@ try {
         encoding: 'utf8',
     });
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /task\.complete result=Failed/);
+    assert.match(result.stdout, /task\.complete result=Failed/, result.stderr || result.error?.message || `Task handler exited silently with status ${result.status}`);
     assert.match(result.stdout, /GitHub token is unresolved or invalid/);
     assert.doesNotMatch(result.stderr, /Cannot find module/);
 } finally {

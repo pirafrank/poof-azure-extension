@@ -7,7 +7,18 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const output = path.join(root, 'build/task');
 rmSync(output, { recursive: true, force: true });
 mkdirSync(output, { recursive: true });
-execFileSync(process.execPath, [path.join(root, 'node_modules/typescript/bin/tsc'), '-p', 'tasks/PoofInstall/tsconfig.json'], { cwd: root, stdio: 'inherit' });
-for (const filename of ['install_poof.sh', 'install_packages.sh', 'task.json', 'package.json']) {
+execFileSync(
+    process.execPath,
+    [path.join(root, 'node_modules/typescript/bin/tsc'), '-p', 'tasks/PoofInstall/tsconfig.json'],
+    { cwd: root, stdio: 'inherit' },
+);
+for (const filename of [
+    'install_poof.sh',
+    'install_packages.sh',
+    'release-metadata.mjs',
+    'verify-release.mjs',
+    'task.json',
+    'package.json',
+]) {
     cpSync(path.join(root, 'tasks/PoofInstall', filename), path.join(output, filename));
 }

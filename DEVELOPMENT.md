@@ -17,6 +17,8 @@ npm run package
 
 Tests mock downloads and use fixture executables; they do not install packages into your real home. Packaging stages compiled wrapper code, shell scripts, and locked production dependencies. The VSIX is checked for missing runtime files and development content, then its unpacked handler is executed without repository dependencies. Azure Pipelines agents do not need npm or a Rust toolchain.
 
+The bootstrap checks the downloaded archive against the digest in GitHub release metadata. When a release also has a checksum manifest and Sigstore bundle, it verifies the manifest signature against the poof release workflow identity and checks the archive against that manifest. Releases without a signature bundle produce a warning; an advertised bundle that cannot be downloaded, a missing manifest required for signature verification, an invalid signature, or a checksum mismatch fails installation. Executable version checks are forcibly terminated after 10 seconds if they stall.
+
 ## Versioning
 
 Before each Marketplace upload, bump the extension and task version together:
