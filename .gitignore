@@ -9,3 +9,4 @@ tasks/PoofInstall/index.js.map
 *.swp
 *.swo
 *~
+.envrc
