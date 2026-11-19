@@ -44,10 +44,6 @@
     {
       "path": "tasks/PoofInstall",
       "packagePath": "tasks/PoofInstall"
-    },
-    {
-      "path": "images",
-      "packagePath": "images"
     }
   ],
   "contributions": [
