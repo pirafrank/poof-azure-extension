@@ -15,7 +15,7 @@ parameters:
 
 jobs:
   - ${{ each agent in parameters.agents }}:
-    - job: ${{ agent.name }}
+    - job: ${{ agent.name }}_pinned
       pool: ${{ agent.pool }}
       steps:
         - checkout: self
@@ -31,16 +31,67 @@ jobs:
           displayName: Download and validate pre-built poof
           inputs:
             version: ${{ parameters.pinnedVersion }}
+        - bash: |
+            set -euo pipefail
+            poof --version | grep -Fx "https://github.com/pirafrank/poof/releases/tag/$EXPECTED_POOF_VERSION"
+          displayName: Verify downloaded poof version
+          env:
+            EXPECTED_POOF_VERSION: ${{ parameters.pinnedVersion }}
         - task: SetupPoofPreview@1
           displayName: Reuse poof and install packages through poof
           inputs:
-            version: latest
-            packages: 'dandavison/delta@0.18.0,lsd-rs/lsd'
+            version: ${{ parameters.pinnedVersion }}
+            packages: |
+              lsd-rs/lsd
+              dandavison/delta@0.18.0
         - bash: |
             set -euo pipefail
-            poof --version | grep -Fx "https://github.com/pirafrank/poof/releases/tag/$PINNED_VERSION"
+            poof --version | grep -Fx "https://github.com/pirafrank/poof/releases/tag/$EXPECTED_POOF_VERSION"
             delta --version
             lsd --version
           displayName: Verify installed tools in a subsequent step
           env:
-            PINNED_VERSION: ${{ parameters.pinnedVersion }}
+            EXPECTED_POOF_VERSION: ${{ parameters.pinnedVersion }}
+
+    - job: ${{ agent.name }}_latest
+      pool: ${{ agent.pool }}
+      steps:
+        - checkout: self
+        - bash: |
+            set -euo pipefail
+            test "$(uname -s)" = "$EXPECTED_OS"
+            test "$(uname -m)" = "$EXPECTED_ARCH"
+          displayName: Verify actual agent platform
+          env:
+            EXPECTED_OS: ${{ agent.os }}
+            EXPECTED_ARCH: ${{ agent.arch }}
+        - bash: |
+            set -euo pipefail
+            expected="$(curl -fsSL --connect-timeout 15 --max-time 120 --retry 2 \
+              https://api.github.com/repos/pirafrank/poof/releases/latest \
+              | python3 -c 'import json, sys; print(json.load(sys.stdin)["tag_name"])')"
+            [[ "$expected" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9._-]+)?$ ]]
+            echo "##vso[task.setvariable variable=EXPECTED_POOF_VERSION]$expected"
+          displayName: Resolve expected latest poof release
+        - task: SetupPoofPreview@1
+          displayName: Download and validate pre-built poof
+        - bash: |
+            set -euo pipefail
+            poof --version | grep -Fx "https://github.com/pirafrank/poof/releases/tag/$EXPECTED_POOF_VERSION"
+          displayName: Verify downloaded poof version
+          env:
+            EXPECTED_POOF_VERSION: $(EXPECTED_POOF_VERSION)
+        - task: SetupPoofPreview@1
+          displayName: Reuse poof and install packages through poof
+          inputs:
+            packages: |
+              lsd-rs/lsd
+              dandavison/delta@0.18.0
+        - bash: |
+            set -euo pipefail
+            poof --version | grep -Fx "https://github.com/pirafrank/poof/releases/tag/$EXPECTED_POOF_VERSION"
+            delta --version
+            lsd --version
+          displayName: Verify installed tools in a subsequent step
+          env:
+            EXPECTED_POOF_VERSION: $(EXPECTED_POOF_VERSION)
