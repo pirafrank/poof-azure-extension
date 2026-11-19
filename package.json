@@ -21,7 +21,7 @@
     "@types/node": "24.10.1",
     "adm-zip": "0.6.1",
     "tfx-cli": "0.24.2",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "yaml": "2.9.1"
   }
 }
