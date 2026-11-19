@@ -1,6 +1,6 @@
 {
   "name": "poof-azure-extension",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Azure DevOps Marketplace extension for poof — binary installer from GitHub Releases",
   "workspaces": [

@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "poof-installer",
   "name": "Setup poof",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "pirafrank",
   "targets": [
     {
@@ -10,8 +10,16 @@
     }
   ],
   "description": "Install poof and pre-built binaries from GitHub Releases into your Azure DevOps pipeline.",
-  "categories": ["Azure Pipelines"],
-  "keywords": ["poof", "binary", "installer", "github releases", "tools"],
+  "categories": [
+    "Azure Pipelines"
+  ],
+  "keywords": [
+    "poof",
+    "binary",
+    "installer",
+    "github releases",
+    "tools"
+  ],
   "icons": {
     "default": "images/poof_tx_bg_128x128.png"
   },
@@ -50,7 +58,9 @@
     {
       "id": "poof-install-task",
       "type": "ms.vss-distributed-task.task",
-      "targets": ["ms.vss-distributed-task.tasks"],
+      "targets": [
+        "ms.vss-distributed-task.tasks"
+      ],
       "properties": {
         "name": "tasks/PoofInstall"
       }

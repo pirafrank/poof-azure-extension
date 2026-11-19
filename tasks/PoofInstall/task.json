@@ -9,13 +9,19 @@
   "version": {
     "Major": 1,
     "Minor": 0,
-    "Patch": 0
+    "Patch": 1
   },
   "minimumAgentVersion": "4.278.0",
-  "runsOn": ["Agent"],
+  "runsOn": [
+    "Agent"
+  ],
   "restrictions": {
-    "commands": { "mode": "restricted" },
-    "settableVariables": { "allowed": [] }
+    "commands": {
+      "mode": "restricted"
+    },
+    "settableVariables": {
+      "allowed": []
+    }
   },
   "instanceNameFormat": "Setup poof $(version)",
   "inputs": [
@@ -37,7 +43,9 @@
     },
     {
       "name": "token",
-      "aliases": ["githubToken"],
+      "aliases": [
+        "githubToken"
+      ],
       "type": "string",
       "label": "GitHub token",
       "defaultValue": "",
