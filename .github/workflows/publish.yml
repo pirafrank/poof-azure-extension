@@ -43,6 +43,8 @@ jobs:
     needs: package
     runs-on: ubuntu-24.04
     environment: marketplace-${{ github.event_name == 'push' && 'production' || 'preview' }}
+    permissions:
+      contents: write
     env:
       CHANNEL: ${{ github.event_name == 'push' && 'production' || 'preview' }}
     steps:
@@ -110,3 +112,11 @@ jobs:
           done
           echo "Marketplace validation did not finish within 30 minutes. Check its status before retrying publication." >&2
           exit 1
+      - name: Create GitHub release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: dist/production/*.vsix
+          body: |
+            Download SetupPoof@1 extension `${{ github.ref_name }}` from [Azure DevOps Marketplace](https://marketplace.visualstudio.com/items?itemName=pirafrank.poof-installer).
