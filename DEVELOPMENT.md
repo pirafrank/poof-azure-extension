@@ -29,17 +29,17 @@ just bump-version 1.0.2
 
 Replace `1.0.2` with the next `MAJOR.MINOR.PATCH` version. This updates the package manifests, task manifest, extension manifest, and npm lockfile. Commit the changes before publishing.
 
-Preview and production use separate extension identities, so the same version can be published to preview first and then production when promoting the same code. Bump the version for the next upload to an identity that has already successfully published that version; do not retry a successful publication with the same version.
+Preview (`pirafrank.poof-setup-preview`) and production (`pirafrank.poof-setup`) use separate extension identities, so the same version can be published to preview first and then production when promoting the same code. Their task references are `SetupPoofPreview@1` and `SetupPoof@1`. Bump the version for the next upload to an identity that has already successfully published that version; do not retry a successful publication with the same version.
 
 ## Packaging and publishing
 
 Manage publisher details and extensions in the
 [Visual Studio Marketplace management portal](https://marketplace.visualstudio.com/manage).
 
-`npm run package` creates a private preview VSIX in `dist/preview` with a separate task GUID and the name `SetupPoofPreview`. `npm run package -- production` creates the production identity in `dist/production`, private by default. Local packaging never publishes anything.
+`npm run package` creates a private preview VSIX in `dist/preview` with a separate task GUID and the name `SetupPoofPreview`. `npm run package -- production` creates a public production VSIX in `dist/production`. Local packaging never publishes anything.
 
-The GitHub Actions workflow publishes a production build when a `vMAJOR.MINOR.PATCH` tag is pushed. It runs checks, packages the tagged source, and uploads the VSIX. To make that production upload public, configure the repository variable `MARKETPLACE_PUBLIC=true`; the release workflow passes it into packaging. Configure `MARKETPLACE_PUBLISHER=pirafrank`, the `MARKETPLACE_PAT` secret, and the `marketplace-production` environment as required by the workflow.
+The GitHub Actions workflow publishes a production build when a `vMAJOR.MINOR.PATCH` tag is pushed. It runs checks, packages the tagged source, and uploads the VSIX. Production packaging always sets the Marketplace public flag. Configure `MARKETPLACE_PUBLISHER=pirafrank`, the `MARKETPLACE_PAT` secret, and the `marketplace-production` environment as required by the workflow.
 
-For a preview publication, run **Publish Extension** from GitHub Actions with the `preview` channel. The workflow shares the preview extension with the configured Azure DevOps test organization. Configure `AZURE_DEVOPS_TEST_ORG` and the preview publishing environment and credentials.
+For a preview publication, manually run **Publish Extension** from GitHub Actions. The workflow shares the preview extension with the configured Azure DevOps test organization. Configure `AZURE_DEVOPS_TEST_ORG` and the preview publishing environment and credentials.
 
 Each Marketplace upload needs a new extension version. After publishing, check the workflow and Marketplace validation status before promoting the same source to another extension identity.

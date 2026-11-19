@@ -1,6 +1,6 @@
 {
   "name": "poof-install-task",
-  "version": "1.0.2",
+  "version": "1.0.6",
   "private": true,
   "description": "Azure DevOps task: install poof and pre-built binaries from GitHub Releases",
   "main": "index.js",

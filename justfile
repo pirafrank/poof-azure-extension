@@ -13,4 +13,4 @@ release-preview: ci
     npm run package
 
 release-production: ci
-    MARKETPLACE_PUBLIC=true npm run package -- production
+    npm run package -- production

@@ -1,10 +1,10 @@
-# Setup poof for Azure Pipelines
+# Poof Setup for Azure Pipelines
 
 Install [poof](https://github.com/pirafrank/poof) and use it to add pre-built command-line tools to your Azure Pipelines jobs.
 
 ## Get started
 
-Install **Setup poof** from the [Azure DevOps Marketplace](https://marketplace.visualstudio.com/items?itemName=pirafrank.poof-installer), then add the task to your pipeline:
+Install **Poof Setup** from the [Azure DevOps Marketplace](https://marketplace.visualstudio.com/items?itemName=pirafrank.poof-setup), then add the task to your pipeline:
 
 ```yaml
 steps:

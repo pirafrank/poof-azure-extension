@@ -53,7 +53,7 @@ if (mode === 'preview') {
     task.id = 'ff8a97db-4c4a-4164-815a-82fb217a8af2';
     task.name = 'SetupPoofPreview';
     task.friendlyName += ' (Preview)';
-} else if (process.env.MARKETPLACE_PUBLIC === 'true') {
+} else {
     manifest.galleryFlags = ['Public'];
 }
 if (process.env.MARKETPLACE_PUBLISHER) manifest.publisher = process.env.MARKETPLACE_PUBLISHER;
