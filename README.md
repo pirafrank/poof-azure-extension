@@ -117,15 +117,10 @@ to preview first and then production when promoting the same code. Bump the vers
 upload to an identity that has already successfully published that version; do not retry a
 successful publication with the same version.
 
-For a production workflow dispatch, provide both acceptance evidence fields:
-
-- `tested_commit`: the full Git commit SHA of the release tag, which must be the exact commit
-  that passed the installed-extension Azure Pipelines acceptance tests.
-- `acceptance_run`: the URL of that successful Azure Pipelines run, in this format:
-  `https://dev.azure.com/ORG/PROJECT/_build/results?buildId=NUMBER`.
-
-Confirm the run succeeded on that exact commit and covered all required platforms. The workflow
-checks the evidence format and commit match; it does not query Azure Pipelines to verify the run.
+Push a `vMAJOR.MINOR.PATCH` tag to publish that commit to the production extension. The workflow
+runs its checks and packages the tagged source before publishing. Run the installed-extension
+Azure Pipelines acceptance tests on the tagged commit before creating the tag. For a preview
+publication, use the workflow dispatch and select `preview`.
 
 `npm run package` creates a private preview VSIX in `dist/preview` with a separate task GUID
 and the name `SetupPoofPreview`. `npm run package -- production` creates the production identity

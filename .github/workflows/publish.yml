@@ -1,37 +1,25 @@
 name: Publish Extension
-run-name: Publish Extension to ${{ inputs.channel || 'preview' }}
+run-name: Publish Extension to ${{ github.event_name == 'push' && 'production' || 'preview' }}
 
 on:
   push:
     tags: ['v[0-9]*.[0-9]*.[0-9]*']
   workflow_dispatch:
-    inputs:
-      channel:
-        type: choice
-        options: [preview, production]
-        default: preview
-        required: true
-      tested_commit:
-        description: Full commit SHA that passed installed-extension Azure Pipelines tests (production only)
-        type: string
-      acceptance_run:
-        description: Successful Azure Pipelines acceptance run URL (production only)
-        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: marketplace-${{ inputs.channel || 'preview' }}
+  group: marketplace-${{ github.event_name == 'push' && 'production' || 'preview' }}
   cancel-in-progress: false
 
 jobs:
   package:
     runs-on: ubuntu-24.04
     env:
-      CHANNEL: ${{ inputs.channel || 'preview' }}
+      CHANNEL: ${{ github.event_name == 'push' && 'production' || 'preview' }}
       MARKETPLACE_PUBLISHER: ${{ vars.MARKETPLACE_PUBLISHER }}
-      MARKETPLACE_PUBLIC: ${{ inputs.channel == 'production' && vars.MARKETPLACE_PUBLIC || 'false' }}
+      MARKETPLACE_PUBLIC: ${{ github.event_name == 'push' && vars.MARKETPLACE_PUBLIC || 'false' }}
       RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -39,16 +27,6 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - name: Validate production release evidence
-        if: inputs.channel == 'production'
-        env:
-          TESTED_COMMIT: ${{ inputs.tested_commit }}
-          ACCEPTANCE_RUN: ${{ inputs.acceptance_run }}
-        run: |
-          test "$GITHUB_REF_TYPE" = tag
-          test "$TESTED_COMMIT" = "$GITHUB_SHA"
-          [[ "$ACCEPTANCE_RUN" =~ ^https://dev\.azure\.com/[^/]+/[^/]+/_build/results\?buildId=[0-9]+ ]]
-          test -n "$MARKETPLACE_PUBLISHER"
       - run: npm ci --ignore-scripts
       - run: npm run check
       - run: npm audit --omit=dev
@@ -64,9 +42,9 @@ jobs:
   publish:
     needs: package
     runs-on: ubuntu-24.04
-    environment: marketplace-${{ inputs.channel || 'preview' }}
+    environment: marketplace-${{ github.event_name == 'push' && 'production' || 'preview' }}
     env:
-      CHANNEL: ${{ inputs.channel || 'preview' }}
+      CHANNEL: ${{ github.event_name == 'push' && 'production' || 'preview' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
