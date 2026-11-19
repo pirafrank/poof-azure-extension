@@ -1,0 +1,43 @@
+# Extension development
+
+This document covers building and publishing the Azure DevOps extension itself. End-user setup and task behavior are documented in the [poof Azure DevOps extension guide](https://poof.fpira.com/docs/azure-devops-extension/).
+
+## Prerequisites
+
+Use Node.js 24 from the repository root.
+
+## Build and validate
+
+```sh
+npm ci --ignore-scripts
+npm run check
+npm audit --omit=dev
+npm run package
+```
+
+Tests mock downloads and use fixture executables; they do not install packages into your real home. Packaging stages compiled wrapper code, shell scripts, and locked production dependencies. The VSIX is checked for missing runtime files and development content, then its unpacked handler is executed without repository dependencies. Azure Pipelines agents do not need npm or a Rust toolchain.
+
+## Versioning
+
+Before each Marketplace upload, bump the extension and task version together:
+
+```sh
+just bump-version 1.0.2
+```
+
+Replace `1.0.2` with the next `MAJOR.MINOR.PATCH` version. This updates the package manifests, task manifest, extension manifest, and npm lockfile. Commit the changes before publishing.
+
+Preview and production use separate extension identities, so the same version can be published to preview first and then production when promoting the same code. Bump the version for the next upload to an identity that has already successfully published that version; do not retry a successful publication with the same version.
+
+## Packaging and publishing
+
+Manage publisher details and extensions in the
+[Visual Studio Marketplace management portal](https://marketplace.visualstudio.com/manage).
+
+`npm run package` creates a private preview VSIX in `dist/preview` with a separate task GUID and the name `SetupPoofPreview`. `npm run package -- production` creates the production identity in `dist/production`, private by default. Local packaging never publishes anything.
+
+The GitHub Actions workflow publishes a production build when a `vMAJOR.MINOR.PATCH` tag is pushed. It runs checks, packages the tagged source, and uploads the VSIX. To make that production upload public, configure the repository variable `MARKETPLACE_PUBLIC=true`; the release workflow passes it into packaging. Configure `MARKETPLACE_PUBLISHER=pirafrank`, the `MARKETPLACE_PAT` secret, and the `marketplace-production` environment as required by the workflow.
+
+For a preview publication, run **Publish Extension** from GitHub Actions with the `preview` channel. The workflow shares the preview extension with the configured Azure DevOps test organization. Configure `AZURE_DEVOPS_TEST_ORG` and the preview publishing environment and credentials.
+
+Each Marketplace upload needs a new extension version. After publishing, check the workflow and Marketplace validation status before promoting the same source to another extension identity.

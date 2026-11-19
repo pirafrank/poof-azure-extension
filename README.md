@@ -1,16 +1,10 @@
 # Setup poof for Azure Pipelines
 
-An Azure DevOps extension equivalent to the [Setup poof GitHub Action](https://github.com/marketplace/actions/setup-poof).
-It downloads an already-built [poof](https://github.com/pirafrank/poof) executable,
-validates it, and runs `poof install` for the requested packages.
-Package selection, downloads, archive handling, and installation belong to poof, not this extension.
+Install [poof](https://github.com/pirafrank/poof) and use it to add pre-built command-line tools to your Azure Pipelines jobs.
 
-This repository is prepared for private testing. Marketplace publication and installed-task
-certification on all target platforms are still required before a public release.
+## Get started
 
-## Usage
-
-After installing the extension into your Azure DevOps organization:
+Install **Setup poof** from the [Azure DevOps Marketplace](https://marketplace.visualstudio.com/items?itemName=pirafrank.poof-installer), then add the task to your pipeline:
 
 ```yaml
 steps:
@@ -19,121 +13,31 @@ steps:
       packages: |
         lsd-rs/lsd
         dandavison/delta@0.18.0
+
   - bash: |
       poof --version
       lsd --version
       delta --version
 ```
 
-Omit `packages` to install poof only. Commas and newlines separate package entries.
-Use `SetupPoofPreview@1` instead when testing the private preview extension.
-No repository-resource checkout or GitHub service connection is needed to use the task.
+To install poof without any packages, omit the `packages` input. Package entries use `owner/repository` or `owner/repository@tag`; separate multiple entries with commas or newlines.
 
-For a private preview, sharing the extension with an organization does not install it. An
-organization administrator must install the shared extension into that organization before
-pipelines can resolve `SetupPoofPreview@1`. See Microsoft's
-[Azure DevOps extension installation guide](https://learn.microsoft.com/en-us/azure/devops/marketplace/install-extension).
-
-## Inputs
-
-| Input | Description | Default |
-|-------|-------------|---------|
-| `version` | Exact poof release, with or without `v`. `latest` reuses a recognized installed poof; otherwise it downloads the latest release. | `latest` |
-| `packages` | Comma/newline-separated `owner/repository` or `owner/repository@tag` entries. | Empty |
-| `token` | Optional GitHub token supplied through a secret variable. `githubToken` is an alias. | Empty |
-
-For reproducible builds, pin poof and package versions. The task's `@1` version is independent
-of the poof release selected by `version`.
-
-Azure Pipelines does not supply a built-in GitHub token. An optional secret reduces GitHub
-API rate limiting and is forwarded to poof through `GITHUB_TOKEN`:
+For reproducible builds, pin both the poof version and package release tags:
 
 ```yaml
 - task: SetupPoof@1
   inputs:
-    version: v0.5.2
-    token: $(MY_GITHUB_PAT)
+    version: v0.6.2
     packages: dandavison/delta@0.18.0
 ```
 
-Store the token as a secret variable or in a variable group. Never put its literal value in
-YAML. An explicitly mapped `GITHUB_TOKEN` environment variable is also accepted, with the input
-taking precedence. An unresolved macro is an error. `System.AccessToken` is not a GitHub token.
+## More information
 
-## Binary validation
+See the [poof Azure DevOps extension guide](https://poof.fpira.com/docs/azure-devops-extension/) for task inputs, GitHub token configuration, agent requirements, installation behavior, and security details.
 
-The bootstrap downloads public poof release assets from `pirafrank/poof` over HTTPS.
-When release metadata advertises a SHA256 manifest, it must download successfully and its
-checksum must match before the executable is run. Corrupt manifests or mismatches fail the task.
-Only a regular root-level `poof` archive member is streamed into a temporary file; other
-archive paths are not extracted. The executable must report the exact upstream release URL
-for the requested version before replacing the installed file.
+## Support
 
-Older releases without a checksum manifest produce an explicit warning and use HTTPS plus
-an executable/version check. Checksums obtained from the same GitHub release detect corruption;
-they do not independently authenticate the publisher. Sigstore signature verification is not
-implemented. Installed binaries are reused by identity/version, not rehashed against a release.
-Only install packages from publishers you trust: downloaded executables run with agent permissions.
-
-## Agent requirements
-
-Target platforms are Linux with glibc and macOS, each on x64 or ARM64. Azure DevOps Services
-agents must be version 4.278.0 or newer with the `Node24` task runner, Bash, curl, tar, and grep.
-Windows, Azure DevOps Server, native musl agents, i686, and armv7 are outside the initial scope.
-Target support is not a certification claim until the installed-extension acceptance matrix passes.
-
-The poof executable is installed in `$HOME/.local/bin`. Tools managed by poof use
-`$XDG_DATA_HOME/poof/bin` on Linux when XDG_DATA_HOME is absolute, otherwise
-`$HOME/.local/share/poof/bin`; macOS uses `$HOME/Library/Application Support/poof/bin`.
-Both directories are added to PATH for subsequent steps. No shell profile is modified.
-Self-hosted agents reuse their installation across runs; concurrent jobs should use separate homes.
-
-## Development
-
-Use Node.js 24 and run from the repository root:
-
-```sh
-npm ci --ignore-scripts
-npm run check
-npm audit --omit=dev
-npm run package
-```
-
-Tests mock downloads and use fixture executables; they do not install packages into your real home.
-Packaging stages compiled wrapper code, shell scripts, and locked production dependencies.
-The VSIX is checked for missing runtime files and development content, then its unpacked handler
-is executed without repository dependencies. Agents do not need npm or a Rust toolchain.
-
-Before each Marketplace upload, bump the extension and task version together with:
-
-```sh
-just bump-version 1.0.1
-```
-
-Replace `1.0.1` with the new `MAJOR.MINOR.PATCH` version. This updates the package manifests,
-task manifest, extension manifest, and npm lockfile. Commit the changes before publishing.
-Preview and production use separate extension identities, so the same version can be published
-to preview first and then production when promoting the same code. Bump the version for the next
-upload to an identity that has already successfully published that version; do not retry a
-successful publication with the same version.
-
-Push a `vMAJOR.MINOR.PATCH` tag to publish that commit to the production extension. The workflow
-runs its checks and packages the tagged source before publishing. Run the installed-extension
-Azure Pipelines acceptance tests on the tagged commit before creating the tag. For a preview
-publication, use the workflow dispatch and select `preview`.
-
-`npm run package` creates a private preview VSIX in `dist/preview` with a separate task GUID
-and the name `SetupPoofPreview`. `npm run package -- production` creates the production identity
-in `dist/production`, still private by default. Local packaging never publishes anything.
-Each upload needs a new extension version; don’t rerun a successful publication with the same version.
-
-## Privacy and support
-
-The extension adds no telemetry. It contacts GitHub for release metadata and public poof assets;
-poof makes its own requests for selected packages. The GitHub token is passed to the bootstrap
-and poof process, registered for Azure log masking, and is not stored in the VSIX or shell profiles.
-See [poof](https://github.com/pirafrank/poof) for the CLI's behavior and security documentation.
-Report extension problems through [GitHub Issues](https://github.com/pirafrank/poof-azure-extension/issues).
+Report extension issues on [GitHub](https://github.com/pirafrank/poof-azure-extension/issues). For poof usage and package questions, see the [poof documentation](https://poof.fpira.com/docs/) or [poof repository](https://github.com/pirafrank/poof).
 
 ## License
 
