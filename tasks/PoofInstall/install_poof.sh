@@ -109,9 +109,6 @@ if [[ "$HAS_CHECKSUM" == yes ]]; then
   elif [[ "$HAS_SIGSTORE" == yes ]]; then
     echo "Could not download the poof checksum manifest required for signature verification." >&2
     exit 1
-  elif [[ -z "$API_DIGEST" ]]; then
-    echo "Could not download the poof checksum manifest and GitHub API supplied no archive digest." >&2
-    exit 1
   else
     if [[ "${TF_BUILD:-}" == [Tt][Rr][Uu][Ee] ]]; then
       echo "##vso[task.logissue type=warning;]poof checksum manifest could not be downloaded; falling back to the GitHub API digest."
