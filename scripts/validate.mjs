@@ -17,7 +17,8 @@ assert.equal(task.name, 'SetupPoof');
 assert.equal(task.category, 'Utility');
 assert.match(task.id, /^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i);
 assert.deepEqual(task.execution, { Node24: { target: 'index.js' } });
-assert.deepEqual(task.restrictions.settableVariables.allowed, []);
+// The agent checks this permission for task.prependpath as well as task.setvariable.
+assert.deepEqual(task.restrictions.settableVariables.allowed, ['PATH']);
 assert.deepEqual(extension.galleryFlags, []);
 assert.equal(extension.contributions[0].properties.name, 'tasks/PoofInstall');
 assert.equal(task.inputs.find(input => input.name === 'token').defaultValue, '');

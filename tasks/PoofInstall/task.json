@@ -20,7 +20,9 @@
       "mode": "restricted"
     },
     "settableVariables": {
-      "allowed": []
+      "allowed": [
+        "PATH"
+      ]
     }
   },
   "instanceNameFormat": "Setup poof $(version)",

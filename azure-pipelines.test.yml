@@ -38,7 +38,6 @@ jobs:
             packages: 'dandavison/delta@0.18.0,lsd-rs/lsd'
         - bash: |
             set -euo pipefail
-            eval "$(poof init --shell bash)"
             poof --version | grep -Fx "https://github.com/pirafrank/poof/releases/tag/$PINNED_VERSION"
             delta --version
             lsd --version
