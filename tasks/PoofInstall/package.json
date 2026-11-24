@@ -5,7 +5,7 @@
   "description": "Azure DevOps task: install poof and pre-built binaries from GitHub Releases",
   "main": "index.js",
   "dependencies": {
-    "azure-pipelines-task-lib": "5.283.0",
+    "azure-pipelines-task-lib": "5.283.3",
     "sigstore": "5.0.1"
   }
 }
